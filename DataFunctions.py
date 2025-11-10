@@ -21,3 +21,9 @@ def bonddim(state):
 def flatness(state):
 
     pass
+
+from sympy import Symbol 
+from openfermion.ops import QubitOperator 
+x = Symbol('x') 
+hamiltonian = QubitOperator('X0 X5')
+
