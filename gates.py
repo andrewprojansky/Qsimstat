@@ -7,6 +7,7 @@ import quimb.tensor as qtn
 import numpy as np
 from tqdm import tqdm
 
+#fundamental gates for simulation
 H = 1/np.sqrt(2) * np.array([[1,1],[1,-1]])
 P = np.array([[1,0],[0,1j]])
 X = np.array([[0,1],[1,0]])
@@ -17,21 +18,35 @@ CNOTb = np.array([[1,0,0,0],[0,0,0,1],[0,0,1,0],[0,1,0,0]])
 SWAP = np.array([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
 Id = np.identity(4)
 sId = np.identity(2)
-delta_list = [Id, CNOT, CNOTb, SWAP]
-sl = [-1, 1]
 T = np.array([[1,0],[0,np.exp(1j*np.pi/4)]])
 
+#list of gates needed for random clifford generation
+delta_list = [Id, CNOT, CNOTb, SWAP]
+sl = [-1, 1]
+#am i missing a Pauli or two here? 
 Pauli_list = [Id, np.kron(X, sId), np.kron(X, Z), np.kron(X,X),
               np.kron(Z, sId), np.kron(Z, Z), np.kron(Z,X),
               np.kron(sId, X), np.kron(sId, Z), np.real(np.kron(Y, Y)),
               np.kron(Y, sId), np.kron(sId, Y), np.kron(Y, Z), np.kron(Z, Y)]
-
 Had_list = [Id, np.kron(H, sId), np.kron(sId, H), np.kron(H,H)]
 Swapo = [Id, SWAP]
 Phase_l = [np.kron(sId, P), np.kron(P, sId), Id, np.kron(P, P)]
 
 #do I need to fix this?
 def Sample_Clifford():
+    """Generate a random 2-qubit Clifford gate.
+
+    Samples a random Clifford gate by composing Pauli operators, phase gates,
+    Hadamard gates, and delta operations (CNOT, SWAP, etc.).
+
+    Returns:
+        np.ndarray: 4x4 unitary matrix representing a random Clifford gate.
+
+    Note:
+        Uses the decomposition: Cliff = sign * F2 @ h @ F1, where
+        F1, F2 are compositions of delta, Pauli, and phase operations,
+        h is a composition of Hadamard and SWAP gates, and sign is ±1.
+    """
 
     F1= np.matmul(random.choice(delta_list), random.choice(Pauli_list))
     F1 = np.matmul(F1, random.choice(Phase_l))
@@ -126,6 +141,19 @@ def dephase(unitary):
     return unitary
 
 def PPgate():
+    """Generate a random matchgate (particle-preserving gate).
+
+    Creates a 2-qubit matchgate that preserves particle number, constructed
+    from two random SU(2) unitaries in the particle-preserving subspace.
+
+    Returns:
+        np.ndarray: 4x4 matchgate matrix with particle-preserving structure.
+            Has the form with zeros in positions that violate particle conservation.
+
+    Note:
+        Matchgates are equivalent to free fermion evolution and preserve
+        the computational basis weight. Both u1 and u2 are dephased to SU(2).
+    """
 
     u1 = make_unitary(2, 0, 1)
     u2 = make_unitary(2, 0, 1)
@@ -138,9 +166,39 @@ def PPgate():
     return G_AB
 
 def random_twolocal(N):
+    """Generate a random two-local Hamiltonian.
+
+    Creates a Hamiltonian with random two-qubit interactions between
+    neighboring qubits.
+
+    Args:
+        N (int): Number of qubits in the system.
+
+    Returns:
+        np.ndarray or qtn.Tensor: Two-local Hamiltonian (to be implemented).
+
+    Note:
+        Currently not implemented. Will generate random Pauli Hamiltonian
+        and potentially find its ground state.
+    """
 
     pass
 
 def random_fendley(N):
+    """Generate a random circuit in Fendley's disguise protocol.
+
+    Implements Fendley's protocol for disguising free fermion circuits
+    to appear non-integrable while maintaining integrability.
+
+    Args:
+        N (int): Number of qubits in the system.
+
+    Returns:
+        circuit or list: Fendley disguise circuit (to be implemented).
+
+    Note:
+        Currently not implemented. Will implement the Fendley disguise
+        technique for creating integrable circuits that mimic chaotic behavior.
+    """
 
     pass

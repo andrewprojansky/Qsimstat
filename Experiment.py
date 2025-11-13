@@ -12,14 +12,40 @@ import numpy as np
 class Experiment:
 
     def __init__(self, N):
+        """Initialize an Experiment instance.
+
+        Args:
+            N (int): Number of qubits in the system.
+
+        Attributes:
+            N (int): Number of qubits.
+            tracktag (dict): Dictionary tracking which state representations to maintain.
+            statstag (dict): Dictionary tracking which statistics to compute.
+            circuittag (dict): Dictionary storing circuit configuration parameters.
+            frames (dict): Dictionary storing data arrays for each statistic.
+        """
 
         self.N = N
         self.tracktag = {"mps":True, "cov":False, "pauliprop":False, "majprop":False}
-        self.statstag = {"renyi10": False, "FAF":False, "IRP":False, "ESS":False, "bonddim":False, "flatness":False}
+        self.statstag = {"renyi10": False, "FAF":False, "IRP":False, "ESS":False, "bonddim":False, 
+                         "flatness":False, "repulsion":False}
         self.circuittag = {"depth":0, "iter":0, "sequence":"", "dataC":""}
         self.frames = {}
 
     def exp_setup(self):
+        """Set up experiment configuration through interactive user input.
+
+        Prompts the user to configure:
+        - Which state representations to track (tracktag)
+        - Which statistics to compute (statstag)
+        - Circuit parameters (depth, iterations, gate sequence, data collection frequency)
+
+        Initializes data frames (numpy arrays) for each enabled statistic based on
+        the number of iterations and data collection points.
+
+        Returns:
+            None
+        """
 
         for tags in [self.tracktag, self.statstag]:
             for k in tags.keys():
@@ -39,12 +65,26 @@ class Experiment:
 
         for k in self.statstag.keys():
             if self.statstag[k] == True:
-                self.frames[k] = np.array((self.circuittag["iter"], num_data_points))
+                if k == "Renyi10" or "FAF":
+                    self.frames[k] = np.array((self.circuittag["iter"], num_data_points, 10))
+                else:
+                    self.frames[k] = np.array((self.circuittag["iter"], num_data_points, 10))
+
 
 
     def execute(self):
+        """Execute the quantum circuit experiment.
 
-        #init data here 
+        Runs the circuit evolution for the specified number of iterations,
+        applying gate sequences according to the circuit configuration.
+        Computes and stores statistics at specified intervals.
+
+        Returns:
+            None
+
+        Note:
+            Currently assumes MPS state tracking only.
+        """
 
         if "random_product" in self.circuittag["sequence"]:
             self.circuittag["sequence"].pop("random_product")
@@ -59,8 +99,32 @@ class Experiment:
                 circuit_params = self.run_circuit(instruction, state, depth)
             #calculate final data here
 
-    #for now, only assume mps tracking. later do more. always assume mps tracking for now. 
-    def run_circuit(self, instruction, state, depth):
+    #for now, only assume mps tracking. later do more. always assume mps tracking for now.
+    def run_circuit(self, instruction, state, depth, iter):
+        """Run a specific circuit instruction on the quantum state.
+
+        Args:
+            instruction (str): Type of circuit to run. Options include:
+                - "random_product": Random product state preparation
+                - "random_clifford_brickwork": Brickwork circuit with random Clifford gates
+                - "random_matchgate_brickwork": Brickwork circuit with random matchgates
+                - "random_haar_brickwork": Brickwork circuit with random Haar gates
+                - "random_matchgate_haar": Random matchgate Haar circuit
+                - "twolocal": Two-local Hamiltonian ground state preparation
+                - "fendleydisguise": Fendley disguise protocol
+            state (qtn.MPS): Current quantum state as Matrix Product State.
+            depth (int): Circuit depth for this instruction.
+            iter (int): Current iteration number for data storage.
+
+        Returns:
+            None: Modifies state in-place and stores computed statistics.
+
+        Note:
+            Currently assumes MPS tracking only. Data is collected at intervals
+            specified by self.circuittag["dataC"].
+
+            More product-like initial states can be added (e.g., three_q, four_q).
+        """
 
         '''
         more product-like initial states
@@ -87,7 +151,7 @@ class Experiment:
                     state.gate_split(Sample_Clifford(), (sites, sites+1), inplace=True)
                 if self.circuittag["dataC"] != 'end':
                     if d*2 % self.circuittag["dataC"] == 0 and d*2 != depth:
-                        self.compute_data(state)
+                        self.compute_data(state, iter, d*2 // self.circuittag["dataC"])
 
         elif instruction == "random_matchgate_brickwork":
             for d in range(depth//2):
@@ -95,7 +159,15 @@ class Experiment:
                     state.gate_split(PPgate(), (sites, sites+1), inplace=True)
                 if self.circuittag["dataC"] != 'end':
                     if d*2 % self.circuittag["dataC"] == 0 and d*2 != depth:
-                        self.compute_data(state)
+                        self.compute_data(state, iter, d*2 // self.circuittag["dataC"])
+
+        elif instruction == "random_haar_brickwork":
+            for d in range(depth//2):
+                for sites in np.concatenate(np.arange(1,self.N,2),np.arange(2,self.N,2)):
+                    state.gate_split(make_ortho(4,0,1), (sites, sites+1), inplace=True)
+                if self.circuittag["dataC"] != 'end':
+                    if d*2 % self.circuittag["dataC"] == 0 and d*2 != depth:
+                        self.compute_data(state, iter, d*2 // self.circuittag["dataC"])
 
         elif instruction == "random_matchgate_haar":
             pass #no depth call - givens rotations? 
@@ -105,6 +177,33 @@ class Experiment:
             pass #no data or depth 
             
 
-    def compute_data(self):
-    
-        pass
+    def compute_data(self, state, it, point):
+        """Compute and store statistics for the current quantum state.
+
+        Args:
+            state (qtn.MPS): Current quantum state as Matrix Product State.
+            it (int): Current iteration number for data indexing.
+            point (int): Data collection point index within this iteration.
+
+        Returns:
+            None: Stores computed statistics in self.frames arrays.
+
+        Note:
+            Only computes statistics that are enabled in self.statstag.
+            Available statistics: renyi10, FAF, IPR, ESS, bonddim, flatness, repulsion.
+        """
+
+        if self.statstag["renyi10"] == True:
+            self.frames["renyi10"][it, point] = Renyi10(state)
+        if self.statstag["FAF"] == True:
+            self.frames["FAF"][it, point] = FAF(state)
+        if self.statstag["IPR"] == True:
+            self.frames["IPR"][it, point] = IPR(state)
+        if self.statstag["ESS"] == True:
+            self.frames["ESS"][it, point] = ESS(state)
+        if self.statstag["bonddim"] == True:
+            self.frames["bonddim"][it, point] = bonddim(state)
+        if self.statstag["flatness"] == True:
+            self.frames["flatness"][it, point] = flatness(state)
+        if self.statstag["repulsion"] == True:
+            self.frames["repulsion"][it, point] = repulsion(state)
