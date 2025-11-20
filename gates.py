@@ -97,7 +97,7 @@ def make_unitary(dim, simmean, simwidth):
     """
     sim = make_sim(dim, simmean, simwidth)
     Q, R = np.linalg.qr(sim)
-    Etta = np.zeros((dim,dim))
+    Etta = np.zeros((dim,dim), dtype=complex)
     for j in range(dim):
         Etta[j,j] = R[j,j]/np.linalg.norm(R[j,j])
     U = np.matmul(Q, Etta)
