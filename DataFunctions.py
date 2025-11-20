@@ -1,4 +1,51 @@
 import numpy as np
+import quimb as qu
+
+def pauli_expectation(state, pauli_string):
+    """Compute expectation value of a Pauli string using MPS.
+
+    Computes <psi|P|psi> by applying gates and computing overlap.
+
+    Args:
+        state (qtn.MPS): Quantum state as Matrix Product State.
+        pauli_string (str): Pauli string like "XZIY" (length must match number of qubits).
+
+    Returns:
+        complex: Expectation value <psi|P|psi>.
+
+    Note:
+        This uses the gate-and-overlap method. A compatibility issue with quimb 1.11.2
+        prevents using state.local_expectation() directly. Upgrading quimb or fixing
+        the partial_trace API issue would allow further optimization.
+    """
+    # Pauli matrices
+    pauli = {
+        'I': qu.pauli('I'),
+        'X': qu.pauli('X'),
+        'Y': qu.pauli('Y'),
+        'Z': qu.pauli('Z')
+    }
+
+    # Find non-identity sites and their operators
+    ops = []
+    where = []
+    for i, ch in enumerate(pauli_string):
+        if ch == 'I':
+            continue
+        ops.append(pauli[ch])
+        where.append(i)
+
+    # All identities -> expectation is 1
+    if not ops:
+        return 1.0
+
+    # Compute <psi|P|psi> by applying gates to a copy and computing overlap
+    psi_copy = state.copy()
+    for op, site in zip(ops, where):
+        psi_copy.gate_(op, site)
+
+    # Compute overlap <psi|P|psi>
+    return state.H @ psi_copy
 
 def ESS(state, N):
     """Calculate the Entanglement Spectrum Statistics (ESS).
@@ -58,6 +105,8 @@ def repulsion(state, N):
     rt = [x for x in rt if x < 5]
     bins = np.linspace(0,4,201)
     digitized = np.digitize(rt, bins)
+    if len(rt) == 0:
+        return np.zeros(200)
     frt = np.array([len(np.array(rt)[digitized==dn]) for dn in range(1, len(bins))]) / len(rt)
     return frt
 
@@ -133,40 +182,19 @@ def FAF(state, encoding, N, k):
         Assumes symbolic encoding of 2N majoranas/Paulis.
     """
     from gates import multiply_strings
-    import quimb as qu
-    from scipy.sparse import kron as sparse_kron, csr_matrix
 
-    # Pauli matrices as sparse
-    pauli_dict = {
-        'I': csr_matrix(qu.eye(2)),
-        'X': csr_matrix(qu.pauli('X')),
-        'Y': csr_matrix(qu.pauli('Y')),
-        'Z': csr_matrix(qu.pauli('Z'))
-    }
-
-    #takes in cov, or can take in state and learn cov
-    #for now, just takes in mps
-    #assumes encoding set of 2n majoranas/Paulis (will build in few, first symbolic only)
+    # Build covariance matrix using MPS expectation values
     cov = np.zeros((2*N, 2*N), dtype=complex)
 
-    # Convert state to dense once (unavoidable for now)
-    psi_dense = state.to_dense()
-
     for i in range(2*N):
-        for j in np.arange(i+1, 2*N, 1):
+        for j in range(i+1, 2*N):
             # Multiply Pauli strings and get phase
             phase, pauli_string = multiply_strings(encoding[i], encoding[j])
             # Pad the Pauli string to N qubits with identity operators
             pauli_string_padded = pauli_string + 'I' * (N - len(pauli_string))
 
-            # Build full Pauli operator as sparse tensor product
-            pauli_op = pauli_dict[pauli_string_padded[0]]
-            for pauli_char in pauli_string_padded[1:]:
-                pauli_op = sparse_kron(pauli_op, pauli_dict[pauli_char], format='csr')
-
-            # Compute expectation value: <psi|O|psi>
-            # For Majoranas: <γ_i γ_j> with anticommutation {γ_i, γ_j} = 2δ_ij
-            expectation = np.vdot(psi_dense, pauli_op.dot(psi_dense))
+            # Compute expectation value using MPS local_expectation
+            expectation = pauli_expectation(state, pauli_string_padded)
             # Take real part to avoid numerical imaginary artifacts
             expectation = np.real(expectation)
             cov[i,j] = phase * expectation
@@ -176,7 +204,8 @@ def FAF(state, encoding, N, k):
     # For free fermions (Gaussian states), the FAF formula gives:
     # FAF_k = N - 1/2 * Tr[(Γ^T Γ)^k] where Γ is the antisymmetric covariance matrix
     # For a Gaussian state, this should equal 0
-    return N - 0.5 * np.trace( np.linalg.matrix_power(cov.T @ cov, k) )
+    result = N - 0.5 * np.trace( np.linalg.matrix_power(cov.T @ cov, k) )
+    return np.real(result)
 
 def bonddim(state):
     """Calculate the bond dimensions of the MPS.
@@ -319,17 +348,9 @@ def SRE(state, N, alpha=2, num_samples=1000):
         # Generate a random Pauli string
         pauli_string = random_pauli(N)
 
-        # Compute expectation value <psi|P|psi>
-        # Use quimb's expec method with the Pauli string
-        try:
-            expectation = state.expec(pauli_string)
-            pauli_expectations.append(expectation)
-        except:
-            # If expectation computation fails, skip this Pauli
-            continue
-
-    if len(pauli_expectations) == 0:
-        return 0.0
+        # Compute expectation value <psi|P|psi> using MPS local_expectation
+        expectation = pauli_expectation(state, pauli_string)
+        pauli_expectations.append(expectation)
 
     # Convert to numpy array and compute |<P>|^2
     pauli_probs = np.abs(np.array(pauli_expectations))**2
