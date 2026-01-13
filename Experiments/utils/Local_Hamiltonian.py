@@ -1,5 +1,6 @@
 import random
 import numpy as np
+from scipy.sparse import csr_matrix, kron
 
 # %%
 def Local_Hamiltonian(terms,locality,N):
@@ -25,4 +26,25 @@ def Local_Hamiltonian(terms,locality,N):
                 break# leave the while loop and return to generating terms
 
     return H_symbolic
+# %%
+
+def str_to_matrix(string):
+    """
+    Convert a Pauli string to its sparse matrix representation.
+
+    :param string: the Pauli string, in the form e.g. "IXYZ" 
+    """
+    I = csr_matrix(np.array([[1, 0], [0, 1]], dtype=complex))# Identity
+    X = csr_matrix(np.array([[0, 1], [1, 0]], dtype=complex))# Pauli X
+    Y = csr_matrix(np.array([[0, -1j], [1j, 0]], dtype=complex))# Pauli Y
+    Z = csr_matrix(np.array([[1, 0], [0, -1]], dtype=complex))# Pauli Z
+
+    paulis = {'I': I, 'X': X, 'Y': Y, 'Z': Z}
+
+    result = paulis[string[0]]# first pauli
+    
+    for pauli_char in string[1:]:# Iteratively apply the Kronecker product with subsequent matrices
+        result = kron(result, paulis[pauli_char], format='csr')
+    return result
+
 # %%
