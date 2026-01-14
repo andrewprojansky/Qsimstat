@@ -28,12 +28,31 @@ def Local_Hamiltonian(terms,locality,N):
     return H_symbolic
 # %%
 
+def pauli_str_check(string):
+    """
+    Check if strings contain only valid Pauli characters 'I', 'X', 'Y', 'Z'
+
+    :param string: the Pauli string, in the form e.g. "IXYZ"
+
+    :raises ValueError: if string contains characters other than 'I', 'X', 'Y', 'Z'
+    """
+    valid_chars = {'I', 'X', 'Y', 'Z'}
+    for i, char in enumerate(string):
+        if char not in valid_chars:
+            raise ValueError(f"Invalid character '{char}' at position {i} in \"'{string}'\". Only 'I', 'X', 'Y', 'Z' are allowed")
+
+
 def str_to_matrix(string):
     """
     Convert a Pauli string to its sparse matrix representation.
 
-    :param string: the Pauli string, in the form e.g. "IXYZ" 
+    :param string: the Pauli string, in the form e.g. "IXYZ"
+
+    :raises ValueError: if string contains characters other than 'I', 'X', 'Y', 'Z'
     """
+
+    pauli_str_check(string)
+
     I = csr_matrix(np.array([[1, 0], [0, 1]], dtype=complex))# Identity
     X = csr_matrix(np.array([[0, 1], [1, 0]], dtype=complex))# Pauli X
     Y = csr_matrix(np.array([[0, -1j], [1j, 0]], dtype=complex))# Pauli Y
@@ -48,3 +67,31 @@ def str_to_matrix(string):
     return result
 
 # %%
+
+def str_commutator(string1, string2):
+    """
+    Returns 0 if the pauli spin operator represented by "string1" commutes with "string2", 1 otherwise (anti-commutes)
+
+    :param string1: the first Pauli string, in the form e.g. "IXYZ"
+    :param string2: the second Pauli string, same form
+    
+    :raises ValueError: if string1 and string2 have different lengths
+    :raises ValueError: if either string contains characters other than 'I', 'X', 'Y', 'Z'
+    """
+    # Check for valid Pauli string entries
+    pauli_str_check(string1)
+    pauli_str_check(string2)
+    
+    # Check if strings have the same length
+    if len(string1) != len(string2):
+        raise ValueError(f"Pauli strings must have the same length. Got string1 length {len(string1)} and string2 length {len(string2)}")
+    
+    # Use a binary variable to track parity of anticommuting positions
+    # This automatically handles the modulo 2 operation
+    anticommute = False# start with commuting, check how many positions don't commute
+    for p1, p2 in zip(string1, string2):
+        if p1 != 'I' and p2 != 'I' and p1 != p2:
+            anticommute ^= True  # Flip the parity
+    
+    # Return 1 if anticommute (odd number of anticommuting positions), 0 if commute (even)
+    return int(anticommute)
