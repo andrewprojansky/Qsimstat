@@ -70,7 +70,7 @@ def str_to_matrix(string):
 
 def str_commutator(string1, string2):
     """
-    Returns 0 if the pauli spin operator represented by "string1" commutes with "string2", 1 otherwise (anti-commutes)
+    Returns True if the pauli spin operator represented by "string1" commutes with "string2", False otherwise (anti-commutes)
 
     :param string1: the first Pauli string, in the form e.g. "IXYZ"
     :param string2: the second Pauli string, same form
@@ -88,10 +88,43 @@ def str_commutator(string1, string2):
     
     # Use a binary variable to track parity of anticommuting positions
     # This automatically handles the modulo 2 operation
-    anticommute = False# start with commuting, check how many positions don't commute
+    commute = True# start with commuting, check how many positions don't commute
     for p1, p2 in zip(string1, string2):
         if p1 != 'I' and p2 != 'I' and p1 != p2:
-            anticommute ^= True  # Flip the parity
+            commute ^= True  # Flip the parity
     
-    # Return 1 if anticommute (odd number of anticommuting positions), 0 if commute (even)
-    return int(anticommute)
+    # Return False if anticommute (odd number of anticommuting positions), True if commute (even)
+    return commute
+
+def commutation_graph(pauli_strings):
+    """
+    Generate a commutation graph for a list of Pauli strings.
+    
+    :param pauli_strings: List of Pauli strings, e.g. ["IXYZ", "XYYI", ...]
+
+    :returns: A 2D numpy array where entry (i, j) is True if pauli_strings[i] commutes with pauli_strings[j], False otherwise
+
+    :raises ValueError: if Pauli strings have different lengths or if any string is invalid
+    """
+    # Handle empty list case
+    if len(pauli_strings) == 0:
+        return np.zeros((0, 0), dtype=bool)
+    
+    # Validate Pauli strings
+    for ps in pauli_strings:
+        pauli_str_check(ps)
+    
+    # Check that all Pauli strings have the same length
+    first_length = len(pauli_strings[0])
+    if not all(len(ps) == first_length for ps in pauli_strings):
+        raise ValueError("All Pauli string terms must have the same length")
+
+    n = len(pauli_strings)
+    graph = np.ones((n, n), dtype=bool)# graph starts with all True since the diagonal always commutes with itself
+
+    # Compute full commutation graph
+    for i in range(n):
+        for j in range(i+1,n):
+            graph[i, j] = graph[j,i] = str_commutator(pauli_strings[i], pauli_strings[j])
+    
+    return graph
